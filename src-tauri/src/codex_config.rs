@@ -862,7 +862,40 @@ fn codex_model_catalog_from_settings(
     profile: CodexCatalogToolProfile,
 ) -> Result<Option<Value>, AppError> {
     let specs = codex_catalog_model_specs(settings, config_text);
+
     if specs.is_empty() {
+        // No preset modelCatalog – dynamically generate one from config.toml's
+        // top-level `model` field. This ensures aggregators / third-party
+        // providers that lack a static modelCatalog show the model the user
+        // actually configured, rather than having no catalog at all (which
+        // makes Codex UI display stale or default model info).
+        if let Some(model_name) = codex_top_level_model(config_text) {
+            let context_window =
+                extract_codex_top_level_u64(config_text, "model_context_window")
+                    .unwrap_or(128_000);
+            let dynamic_spec = CodexCatalogModelSpec {
+                model: model_name.clone(),
+                display_name: model_name,
+                context_window,
+                supports_parallel_tool_calls: None,
+                input_modalities: None,
+                base_instructions: None,
+            };
+            let template = match profile {
+                CodexCatalogToolProfile::NativeResponses => {
+                    load_codex_native_responses_template()
+                }
+                CodexCatalogToolProfile::ProxyChat => {
+                    load_codex_model_catalog_template()?
+                }
+            };
+            return Ok(Some(codex_model_catalog_from_specs(
+                &[dynamic_spec],
+                &template,
+                profile,
+            )));
+        }
+
         return Ok(None);
     }
 
