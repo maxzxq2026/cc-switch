@@ -81,7 +81,12 @@ fn scan_sessions_sqlite() -> Vec<SessionMeta> {
     // Query sessions — use flexible column access via pragma
     let columns = get_table_columns(&conn, "sessions");
 
-    let query = "SELECT * FROM sessions ORDER BY rowid DESC LIMIT 500";
+    let has_deleted_col = columns.iter().any(|c| c == "deleted");
+    let query = if has_deleted_col {
+        "SELECT * FROM sessions WHERE deleted IS NULL OR deleted = 0 ORDER BY rowid DESC LIMIT 500"
+    } else {
+        "SELECT * FROM sessions ORDER BY rowid DESC LIMIT 500"
+    };
     let mut stmt = match conn.prepare(query) {
         Ok(s) => s,
         Err(_) => return Vec::new(),
@@ -252,21 +257,32 @@ pub fn delete_session_sqlite(session_id: &str, source: &str) -> Result<bool, Str
     let conn =
         Connection::open(&db_path).map_err(|e| format!("Failed to open Hermes database: {e}"))?;
 
+    // Ensure the soft-delete column exists
+    let columns = get_table_columns(&conn, "sessions");
+    if !columns.iter().any(|c| c == "deleted") {
+        let _ = conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0",
+        );
+    }
+
     let tx = conn
         .unchecked_transaction()
         .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
-    // Delete messages first (child records)
+    // Delete messages (child records) but soft-delete the session row to preserve token data
     let _ = tx.execute("DELETE FROM messages WHERE session_id = ?1", [session_id]);
 
-    let deleted = tx
-        .execute("DELETE FROM sessions WHERE id = ?1", [session_id])
-        .map_err(|e| format!("Failed to delete Hermes session: {e}"))?;
+    let updated = tx
+        .execute(
+            "UPDATE sessions SET deleted = 1, message_count = 0 WHERE id = ?1",
+            [session_id],
+        )
+        .map_err(|e| format!("Failed to soft-delete Hermes session: {e}"))?;
 
     tx.commit()
         .map_err(|e| format!("Failed to commit session deletion: {e}"))?;
 
-    Ok(deleted > 0)
+    Ok(updated > 0)
 }
 
 fn parse_sqlite_source(source: &str) -> Option<(PathBuf, String)> {
