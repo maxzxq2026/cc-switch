@@ -1435,6 +1435,15 @@ function App() {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                onClick={() => setCurrentView("sessions")}
+                                className="text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 w-8 px-2"
+                                title={t("sessionManager.title")}
+                              >
+                                <History className="flex-shrink-0 w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => void openHermesWebUI()}
                                 className="text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 w-8 px-2"
                                 title={t("hermes.webui.open")}

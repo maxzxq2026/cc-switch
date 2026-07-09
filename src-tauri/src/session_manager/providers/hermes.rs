@@ -197,7 +197,7 @@ pub fn load_messages_sqlite(source: &str) -> Result<Vec<SessionMessage>, String>
 
     // Try querying with common column names
     let query =
-        "SELECT role, content, created_at FROM messages WHERE session_id = ?1 ORDER BY created_at ASC";
+        "SELECT role, content, timestamp FROM messages WHERE session_id = ?1 ORDER BY timestamp ASC";
 
     let mut stmt = conn
         .prepare(query)
